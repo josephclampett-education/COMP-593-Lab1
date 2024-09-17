@@ -31,7 +31,7 @@ if not found_rgb:
 config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
-# ArUco
+#Setup Aruco Detector
 arucoDict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
 arucoParams = cv2.aruco.DetectorParameters()
 arucoDetector = cv2.aruco.ArucoDetector(arucoDict, arucoParams)
@@ -46,6 +46,7 @@ try:
         frames = pipeline.wait_for_frames()
         depth_frame = frames.get_depth_frame()
         color_frame = frames.get_color_frame()
+         
         if not depth_frame or not color_frame:
             continue
 
@@ -53,40 +54,90 @@ try:
         depth_image = np.asanyarray(depth_frame.get_data())
         color_image = np.asanyarray(color_frame.get_data())
 
-        # ArUco Detection
+        #ArUco Detection
         corners, ids, rejected = arucoDetector.detectMarkers(color_image)
-        color_image = cv2.aruco.drawDetectedMarkers(color_image, corners, ids)
+        color_image = cv2.aruco.drawDetectedMarkers(color_image,corners,ids)
+
 
         # ================================
         # DRAWING
         # ================================
 
-        depthIntrinsics = depth_frame.profile.as_video_stream_profile().intrinsics
-        
-        # for i, cornerSet in enumerate(corners):
-        #     print(f"======== ID: {ids[i]} ========\n")
-
-        #     assert(cornerSet.shape[0] == 1)
-        #     for j, corner in enumerate(cornerSet[0, ...]):
-        #         (cameraX, cameraY) = corner
-        #         cameraZ = depth_frame.get_distance(cameraX, cameraY)
-        #         pointWS = rs.rs2_deproject_pixel_to_point(depthIntrinsics, [cameraX, cameraY], cameraZ)
-
-        #         print(f"PointCS[{j}]: [{cameraX}, {cameraY}, {cameraZ}]")
-        #         print(f"PointWS[{j}]: {pointWS}\n")
-
-        depthData = depth_frame.get_data()
-        depthBuffer = np.zeros(depth_image.shape)
-        for y in range(depth_image.shape[0]):
-            for x in range(depth_image.shape[1]):
-                cameraZ = depth_frame.get_distance(x, y)
-                depthBuffer[y, x] = cameraZ
-
+       #depthIntrinsics = depth_frame.profile.as_video_stream_profile().intrinsics
+        """  
+        for cornerSet, i in corners:
+            print(f"ID: {ids[i]}\n")
+            for corner in cornerSet[0, ...]:
+                (x, y) = corner
+                z = depth_frame.get_distance(x, y)
+                p = rs.rs2_deproject_pixel_to_point(depthIntrinsics, [x, y], z) 
                 
-        # ================================
+                
+                     depthIntrinsics = depth_frame.profile.as_video_stream_profile().intrinsics
+   
+    # 遍历所有检测到的标记
+        for marker_index, marker_corners in enumerate(corners):
+        # 遍历当前 ArUco 标记的每个角点
+         for corner in marker_corners[0]:
+            # 获取像素坐标 (x, y)
+            x, y = int(corner[0]), int(corner[1])
+            print(x)
+
+            # 获取像素 (x, y) 处的深度值
+            depth = depth_frame.get_distance(x, y)
+            
+
+            # 将像素坐标反投影到3D空间
+            point_3d = rs.rs2_deproject_pixel_to_point(depthIntrinsics, [x, y], depth)
+
+            # 输出每个角点的 3D 坐标
+            print(f"标记 {ids[marker_index]} 在像素 ({x}, {y}) 处的角点的3D坐标: {point_3d}") 
+
+
+            
+    # 遍历所有检测到的标记
+        for marker_index, marker_corners in enumerate(corners):
+        # 遍历当前 ArUco 标记的每个角点
+         for corner in marker_corners[0]:
+            # 获取像素坐标 (x, y)
+            x, y = int(corner[0]), int(corner[1])
+            # 获取像素 (x, y) 处的深度值
+            depth = depth_frame.get_distance(x, y)
+            if depth > 0:  # Ensure we have valid depth
+                        # Deproject pixel to 3D point
+                        point_3d = rs.rs2_deproject_pixel_to_point(depth_intrinsics, [x, y], depth)
+                        print(f"Marker {ids[marker_index]} at pixel ({x}, {y}) has 3D coordinates: {point_3d}")
+            else:
+                        print(f"No valid depth at pixel ({x}, {y}) for marker {ids[marker_index]}")
+                """
+
+ # ================================
+    
+    # Align depth frame to color frame
+        align = rs.align(rs.stream.color)
+        depth_intrinsics = depth_frame.profile.as_video_stream_profile().intrinsics
+
+        for marker_index, maker_corners in enumerate (corners):
+             
+             corners_np = np.array(maker_corners[0])
+
+             center_x = np.mean(corners_np[: , 0])
+             center_y = np.mean(corners_np[: , 1])
+
+
+            # Cast to integer for depth lookup
+            #int_center_x = int(center_x)
+             #int_center_y = int(center_y)
+            
+             depth = depth = depth_frame.get_distance(center_x, center_y)
+             point_3d = rs.rs2_deproject_pixel_to_point(depth_intrinsics, [center_x, center_y], depth)
+
+             print(f"{ids[marker_index]}: {point_3d}")
+   
+       
 
         # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depthBuffer, alpha=20), cv2.COLORMAP_HOT)
+        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
 
         depth_colormap_dim = depth_colormap.shape
         color_colormap_dim = color_image.shape
